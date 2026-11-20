@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    uses: Thormie-Harshey/ci-workflow-library/.github/workflows/build-and-test.yml@v1
+    with:
+      node-version: "20"
+      test-command: npm test
+
+  security-scan:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Scan dependencies, Dockerfile and secrets
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+
+  build-push:
+    needs: security-scan
+    if: github.event_name == 'push'
+    permissions:
+      contents: read
+      packages: write
+    uses: Thormie-Harshey/ci-workflow-library/.github/workflows/docker-build-push.yml@v1
+    with:
+      image-name: thormie-harshey/payments-api
+      registry: ghcr.io
+      registry-username: ${{ github.actor }}
+    secrets:
+      registry_password: ${{ secrets.GITHUB_TOKEN }}
